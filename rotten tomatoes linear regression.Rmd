@@ -1,0 +1,77 @@
+---
+title: "Predicting Rotten Tomatoes Scores Using Linear Regression"
+author: "Anthony Drake"
+date: "February 10, 2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("fivethirtyeight")
+library("ggplot2")
+library("dplyr")
+library("tidyr")
+```
+
+## Introduction
+
+Our main goal is to find out if a relationship exists between the critics' Rotten Tomatoes scores and the users' Rotten Tomatoes score using the fandango dataset in the fivethirtyeight package. The dataset has every film that has a Rotten Tomatoes rating, including its critic and user rating, a Metacritic score (both critic and user) and an IMDb score. The fandango set has 23 columns and 146 rows and no missing values. In addition to the RT, Metacritic and IMDb scores, which are scored on a 1-100 scale (except for IMDB which uses a 1-10 scale), the dataset also includes a "_norm" variable for the 3 which normalized the scores to a 5 point system. With the exception of the film column, all columns are either an integer or numerical value.
+
+## Preparing the Data
+
+There wasn't much in the way of preparing the data. There were no missing values, and splitting up the datasets by year seemed counterintuitive so I kept the dataset as is. 
+
+
+## First Impressions
+
+At a glance, there does appear to be a moderately strong upward trend; Rotten Tomatoes user scores seem to reflect the critics' scores. But before we make any conclusions, let's build a linear regression model to predict the results between the two.
+
+```{r}
+plot(fandango$rottentomatoes,fandango$rottentomatoes_user)
+
+```
+
+## Building the Model
+
+There are some holes in my first impression from earlier. For example, movies with a bad to mediocre score on Rotten Tomatoes are inconsistant because viewers tend to give more generous movie scores or much lower scores than critics' scores. Below is a model that attempts to predict critic scores based on viewer's scores using bad-mediocre scores .
+
+```{r}
+with(fandango, plot(rottentomatoes_user,rottentomatoes))
+mod <-lm(rottentomatoes~rottentomatoes_user, fandango)
+new <-data.frame(rottentomatoes_user=c(30,40,50,60))
+pred <-predict(mod, new)
+points(new$rottentomatoes_user, pred, col="red")
+```
+
+My initial guess was wrong, it looks like user's generally give a lower score than critics for movies they consider bad-mediocre. Now I will build a model that will measure fit, train data to evaluate a model against the metric. 
+
+```{r}
+set.seed(300)
+idx <-sample(nrow(fandango))
+tidx <- idx[1:round(.8*nrow(fandango))]
+train <- fandango[tidx,c("rottentomatoes_user","rottentomatoes")]
+test <- fandango[-tidx,c("rottentomatoes_user","rottentomatoes")]
+mod <-lm(rottentomatoes~rottentomatoes_user, train)
+pred <-predict(mod, test)
+ggplot(train,aes(rottentomatoes_user,rottentomatoes)) +
+  geom_point() +
+  geom_point(data=test,aes(rottentomatoes_user,rottentomatoes), color="chartreuse") +
+  geom_smooth(method="lm",se=FALSE,color="red")
+```
+
+Looking at the slope of this plot above, it looks like we can give some evidence that critics give high scores for bad-mediocre movies than users. However there are many extreme values that have affected the slope, particularly ones where users gave a bad score while critics give a very positive score so I'd argue that there isn't much of a relationship.
+
+
+## Conclusion
+
+```{r}
+predT <-predict(mod, train)
+res <-signif(train$rottentomatoes_user-predT,5)
+RMSE <-sqrt(mean(res^2))
+resT <-signif(test$rottentomatoes_user-pred, 5)
+RMSET <-sqrt(mean(resT^2))
+data.frame(RMSE,RMSET)
+```
+
+
+Due to the amount of extreme values in the visualizations, I can't make a firm statement that there is a relationship between the Rotten Tomatoes user score and the critic scores. There does seem to be a light-moderate relationship and, although looks can be deceiving, the RMSE and RMSET calculations show that there wasn't a good fit for this relationship. In addition, the RMSE and RMSET aren't very close together so there wasn't a very good balance between the test and training model. Going forward, the client shouldn't use the superficial relationship as the be all end all, but instead should consider the training model and test results because the amount of outliers in the data is enough to dispell my original prediction.
